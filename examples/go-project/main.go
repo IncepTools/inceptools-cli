@@ -4,13 +4,11 @@ package main
 import (
 	"fmt"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	// Load .env if it exists
-	_ = godotenv.Load()
+	// Simple example: relies on environment variables set in the shell or .env
+	// In a real project, you might use a library like godotenv here.
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
