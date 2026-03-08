@@ -1,0 +1,5 @@
+{
+    "env_variable": "DATABASE_URL",
+    "migration_path": "./migrations",
+    "dialect": "postgres"
+}
