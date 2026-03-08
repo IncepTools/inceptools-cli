@@ -1,0 +1,12 @@
+{
+    "name": "nodejs-example",
+    "version": "1.0.0",
+    "scripts": {
+        "migrate": "inceptools migrate",
+        "migrate:down": "inceptools down 1",
+        "start": "node index.js"
+    },
+    "dependencies": {
+        "dotenv": "^16.0.0"
+    }
+}

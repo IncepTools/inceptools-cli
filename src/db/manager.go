@@ -29,7 +29,7 @@ func RunMigrations(db *gorm.DB, cfg Config) error {
 	}
 
 	// 3. Load Local Files
-	localFiles, err := loadLocalMigrations(cfg.MigrationPath)
+	localFiles, err := LoadLocalMigrations(cfg.MigrationPath)
 	if err != nil {
 		return err
 	}
@@ -177,20 +177,20 @@ func RollbackMigrations(db *gorm.DB, cfg Config, steps int) error {
 }
 
 // Helper struct for local files
-type localMigration struct {
+type LocalMigration struct {
 	Version    string
 	Name       string
 	UpScript   string
 	DownScript string
 }
 
-func loadLocalMigrations(path string) (map[string]localMigration, error) {
+func LoadLocalMigrations(path string) (map[string]LocalMigration, error) {
 	files, err := os.ReadDir(path)
 	if err != nil {
 		return nil, fmt.Errorf("could not read migration directory: %v", err)
 	}
 
-	migs := make(map[string]*localMigration)
+	migs := make(map[string]*LocalMigration)
 
 	for _, f := range files {
 		if f.IsDir() {
@@ -217,7 +217,7 @@ func loadLocalMigrations(path string) (map[string]localMigration, error) {
 			rawName = strings.TrimSuffix(rawName, ".up.sql")
 			rawName = strings.TrimSuffix(rawName, ".down.sql")
 
-			migs[version] = &localMigration{
+			migs[version] = &LocalMigration{
 				Version: version,
 				Name:    rawName,
 			}
@@ -236,7 +236,7 @@ func loadLocalMigrations(path string) (map[string]localMigration, error) {
 	}
 
 	// Convert pointer map to value map
-	result := make(map[string]localMigration)
+	result := make(map[string]LocalMigration)
 	for k, v := range migs {
 		result[k] = *v
 	}

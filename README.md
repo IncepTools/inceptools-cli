@@ -148,6 +148,17 @@ When you run `inceptools migrate`, the tool performs a **two-phase sync**:
 
 This ensures your database schema always mirrors the migration files in your project.
 
+---
+
+## 📂 Examples
+
+Explore practical integration examples in the [examples/](./examples) directory:
+
+- **[Go Project](./examples/go-project)**: Integration using `Makefile` and standard Go layout.
+- **[Node.js Project](./examples/nodejs-project)**: Integration using `npm scripts` and `package.json`.
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

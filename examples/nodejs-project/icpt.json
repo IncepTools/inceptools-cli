@@ -1,0 +1,5 @@
+{
+    "tableName": "migrations",
+    "migrationPath": "migrations",
+    "envVariable": "DATABASE_URL"
+}

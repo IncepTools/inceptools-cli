@@ -7,21 +7,17 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    name: Build & Vet (Go ${{ matrix.go-version }})
+  # ── SQLite (fast, no services needed) ──────────────────────────────────────
+  test-sqlite:
+    name: Test (SQLite)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ["1.22.x", "1.23.x"]
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Go ${{ matrix.go-version }}
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version-file: go.mod
           cache: true
 
       - name: Download dependencies
@@ -32,3 +28,97 @@ jobs:
 
       - name: Build
         run: go build -v ./...
+
+      - name: Test (SQLite in-memory)
+        run: go test -v -count=1 -race -coverprofile=coverage.txt ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-sqlite
+          path: coverage.txt
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  test-postgres:
+    name: Test (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: inceptools_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Test (PostgreSQL)
+        env:
+          INCEPTOOLS_TEST_DIALECT: postgres
+          INCEPTOOLS_TEST_DSN: "host=localhost user=postgres password=postgres dbname=inceptools_test port=5432 sslmode=disable"
+        run: go test -v -count=1 -coverprofile=coverage.txt ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-postgres
+          path: coverage.txt
+
+  # ── MySQL ──────────────────────────────────────────────────────────────────
+  test-mysql:
+    name: Test (MySQL 8.0)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: inceptools_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Test (MySQL)
+        env:
+          INCEPTOOLS_TEST_DIALECT: mysql
+          INCEPTOOLS_TEST_DSN: "root:root@tcp(127.0.0.1:3306)/inceptools_test?charset=utf8mb4&parseTime=True&loc=Local"
+        run: go test -v -count=1 -coverprofile=coverage.txt ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-mysql
+          path: coverage.txt

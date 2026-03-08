@@ -1,0 +1,6 @@
+{
+    "tableName": "schema_migrations",
+    "migrationPath": "./migrations",
+    "envVariable": "DATABASE_URL",
+    "dialect": "postgres"
+}
