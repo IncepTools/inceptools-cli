@@ -33,7 +33,7 @@ jobs:
         run: go test -v -count=1 -race -coverprofile=coverage.txt ./...
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-sqlite
           path: coverage.txt
@@ -76,7 +76,7 @@ jobs:
         run: go test -v -count=1 -coverprofile=coverage.txt ./...
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-postgres
           path: coverage.txt
@@ -118,7 +118,7 @@ jobs:
         run: go test -v -count=1 -coverprofile=coverage.txt ./...
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-mysql
           path: coverage.txt

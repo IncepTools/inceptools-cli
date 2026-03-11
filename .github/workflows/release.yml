@@ -70,7 +70,7 @@ jobs:
           sha256sum * > checksums-${{ matrix.os }}-${{ matrix.arch }}.txt
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binaries-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/
