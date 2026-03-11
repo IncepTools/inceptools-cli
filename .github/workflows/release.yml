@@ -12,6 +12,7 @@ jobs:
   build:
     name: Build (${{ matrix.os }}/${{ matrix.arch }})
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         include:
@@ -38,33 +39,42 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build binary
+      - name: Build Binary
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
         run: |
+          mkdir -p dist
+
           BINARY_NAME="inceptools-${{ matrix.os }}-${{ matrix.arch }}"
           if [ "${{ matrix.os }}" = "windows" ]; then
             BINARY_NAME="${BINARY_NAME}.exe"
           fi
-          CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -trimpath -o "dist/${BINARY_NAME}" .
 
-          # Create archive for Homebrew and manual install
+          CGO_ENABLED=0 go build \
+            -ldflags="-s -w -X main.Version=${{ github.ref_name }}" \
+            -trimpath \
+            -o "dist/$BINARY" .
+
+      - name: Package Archive
+        run: |
           cd dist
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            zip "inceptools-${{ matrix.os }}-${{ matrix.arch }}.zip" "$BINARY_NAME"
-          else
-            tar -czf "inceptools-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" "$BINARY_NAME"
-          fi
-          cd ..
 
-      - name: Build .deb package (Linux only)
+          for file in inceptools-*; do
+            if [[ "$file" == *.exe ]]; then
+              zip "${file%.exe}.zip" "$file"
+            else
+              tar -czf "$file.tar.gz" "$file"
+            fi
+          done
+
+      - name: Build Debian Package (Linux only)
         if: matrix.os == 'linux'
         run: |
           chmod +x scripts/build-deb.sh
           ./scripts/build-deb.sh ${{ github.ref_name }} ${{ matrix.arch }}
 
-      - name: Generate checksums
+      - name: Generate Checksums
         run: |
           cd dist
           sha256sum * > checksums-${{ matrix.os }}-${{ matrix.arch }}.txt
@@ -72,33 +82,33 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: binaries-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/
+          name: build-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/*
           retention-days: 1
 
+
   release:
-    name: Create GitHub Release
+    name: Create Release
     needs: build
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v8
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
         with:
-          path: dist/
+          path: dist
           merge-multiple: true
 
-      - name: Merge checksums
+      - name: Merge Checksums
         run: |
           cd dist
-          cat checksums-*.txt > checksums.txt
-          rm checksums-*.txt
+          cat checksums-* > checksums.txt
+          rm checksums-*
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
@@ -107,9 +117,6 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/checksums.txt
-            dist/inceptools-linux-*
-            dist/inceptools-darwin-*
-            dist/inceptools-windows-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
@@ -118,13 +125,11 @@ jobs:
           VERSION=${{ github.ref_name }}
           V_STR=${VERSION#v}
 
-          # Calculate SHA256 for all platforms
-          SHA_DARWIN_AMD64=$(sha256sum dist/inceptools-darwin-amd64.tar.gz | cut -d ' ' -f 1)
-          SHA_DARWIN_ARM64=$(sha256sum dist/inceptools-darwin-arm64.tar.gz | cut -d ' ' -f 1)
-          SHA_LINUX_AMD64=$(sha256sum dist/inceptools-linux-amd64.tar.gz | cut -d ' ' -f 1)
-          SHA_LINUX_ARM64=$(sha256sum dist/inceptools-linux-arm64.tar.gz | cut -d ' ' -f 1)
+          SHA_DARWIN_AMD64=$(sha256sum dist/inceptools-darwin-amd64.tar.gz | cut -d ' ' -f1)
+          SHA_DARWIN_ARM64=$(sha256sum dist/inceptools-darwin-arm64.tar.gz | cut -d ' ' -f1)
+          SHA_LINUX_AMD64=$(sha256sum dist/inceptools-linux-amd64.tar.gz | cut -d ' ' -f1)
+          SHA_LINUX_ARM64=$(sha256sum dist/inceptools-linux-arm64.tar.gz | cut -d ' ' -f1)
 
-          # Update the formula
           sed -i "s/{{VERSION}}/${V_STR}/g" Formula/inceptools.rb
           sed -i "s/{{SHA256_DARWIN_AMD64}}/${SHA_DARWIN_AMD64}/g" Formula/inceptools.rb
           sed -i "s/{{SHA256_DARWIN_ARM64}}/${SHA_DARWIN_ARM64}/g" Formula/inceptools.rb
@@ -134,12 +139,9 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Ensure we are on main branch for the commit
           git fetch origin main
           git checkout main
 
           git add Formula/inceptools.rb
-          git commit -m "chore: update homebrew formula to ${VERSION}" || echo "No changes to commit"
-          git push origin main || echo "Push failed"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          git commit -m "chore: update homebrew formula to ${VERSION}" || echo "No changes"
+          git push origin main || echo "Push skipped"
