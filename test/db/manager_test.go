@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	migration "incepttools/src/db" // Import the package under test
+	"incepttools/src/db" // Import the package under test
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
@@ -74,19 +74,19 @@ func createTempMigrations(t *testing.T, files map[string]string) string {
 
 // testConfig returns a Config using a unique table name per test to avoid
 // collisions when using a shared DB (Postgres/MySQL).
-func testConfig(t *testing.T, migrationPath string) migration.Config {
+func testConfig(t *testing.T, migrationPath string) db.Config {
 	t.Helper()
-	return migration.Config{
+	return db.Config{
 		TableName:     "test_migrations",
 		MigrationPath: migrationPath,
 	}
 }
 
 // countRecords returns the number of rows in the given table with the given status.
-func countRecords(t *testing.T, db *gorm.DB, tableName, status string) int64 {
+func countRecords(t *testing.T, gdb *gorm.DB, tableName, status string) int64 {
 	t.Helper()
 	var count int64
-	db.Table(tableName).Where("status = ?", status).Count(&count)
+	gdb.Table(tableName).Where("status = ?", status).Count(&count)
 	return count
 }
 
@@ -107,7 +107,7 @@ func TestLoadLocalMigrations_ValidFiles(t *testing.T) {
 		"000002_add_email.down.sql":    "ALTER TABLE users DROP COLUMN email;",
 	})
 
-	migs, err := migration.LoadLocalMigrations(dir)
+	migs, err := db.LoadLocalMigrations(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestLoadLocalMigrations_SkipsNonSQL(t *testing.T) {
 	})
 	os.Mkdir(filepath.Join(dir, "subdir"), 0755)
 
-	migs, err := migration.LoadLocalMigrations(dir)
+	migs, err := db.LoadLocalMigrations(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestLoadLocalMigrations_SkipsNonSQL(t *testing.T) {
 }
 
 func TestLoadLocalMigrations_MissingDir(t *testing.T) {
-	_, err := migration.LoadLocalMigrations("/tmp/nonexistent_migration_dir_xyz_123")
+	_, err := db.LoadLocalMigrations("/tmp/nonexistent_migration_dir_xyz_123")
 	if err == nil {
 		t.Fatal("expected error for missing directory, got nil")
 	}
@@ -149,7 +149,7 @@ func TestLoadLocalMigrations_MissingDir(t *testing.T) {
 
 func TestLoadLocalMigrations_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
-	migs, err := migration.LoadLocalMigrations(dir)
+	migs, err := db.LoadLocalMigrations(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,45 +162,45 @@ func TestLoadLocalMigrations_EmptyDir(t *testing.T) {
 // RunMigrations — 10 tests
 // ---------------------------------------------------------------------------
 
-func TestRunMigrations_CreatesTable(t *testing.T) {
-	db := openTestDB(t)
+func TestRunMigrations_TableCreation(t *testing.T) {
+	gdb := openTestDB(t)
 	cfg := testConfig(t, t.TempDir())
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !tableExists(db, cfg.TableName) {
+	if !tableExists(gdb, cfg.TableName) {
 		t.Error("migration table was not created")
 	}
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRunMigrations_AppliesSingle(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_create_posts.up.sql":   "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT);",
 		"000001_create_posts.down.sql": "DROP TABLE IF EXISTS posts;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !tableExists(db, "posts") {
+	if !tableExists(gdb, "posts") {
 		t.Error("expected 'posts' table to exist after migration")
 	}
-	if n := countRecords(t, db, cfg.TableName, migration.StatusSuccess); n != 1 {
+	if n := countRecords(t, gdb, cfg.TableName, db.StatusSuccess); n != 1 {
 		t.Errorf("expected 1 success record, got %d", n)
 	}
 
-	db.Exec("DROP TABLE IF EXISTS posts")
-	cleanTable(t, db, cfg.TableName)
+	gdb.Exec("DROP TABLE IF EXISTS posts")
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRunMigrations_AppliesMultipleInOrder(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_create_a.up.sql":   "CREATE TABLE table_a (id INTEGER PRIMARY KEY);",
 		"000001_create_a.down.sql": "DROP TABLE IF EXISTS table_a;",
@@ -210,81 +210,81 @@ func TestRunMigrations_AppliesMultipleInOrder(t *testing.T) {
 		"000003_create_c.down.sql": "DROP TABLE IF EXISTS table_c;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	for _, tbl := range []string{"table_a", "table_b", "table_c"} {
-		if !tableExists(db, tbl) {
+		if !tableExists(gdb, tbl) {
 			t.Errorf("expected table %q to exist", tbl)
 		}
 	}
-	if n := countRecords(t, db, cfg.TableName, migration.StatusSuccess); n != 3 {
+	if n := countRecords(t, gdb, cfg.TableName, db.StatusSuccess); n != 3 {
 		t.Errorf("expected 3 success records, got %d", n)
 	}
 
 	for _, tbl := range []string{"table_a", "table_b", "table_c"} {
-		db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tbl))
+		gdb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tbl))
 	}
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRunMigrations_SkipsAlreadyApplied(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_create_items.up.sql":   "CREATE TABLE items (id INTEGER PRIMARY KEY);",
 		"000001_create_items.down.sql": "DROP TABLE IF EXISTS items;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("first run failed: %v", err)
 	}
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("second run failed: %v", err)
 	}
 
-	if n := countRecords(t, db, cfg.TableName, migration.StatusSuccess); n != 1 {
+	if n := countRecords(t, gdb, cfg.TableName, db.StatusSuccess); n != 1 {
 		t.Errorf("expected exactly 1 success record after idempotent run, got %d", n)
 	}
 
-	db.Exec("DROP TABLE IF EXISTS items")
-	cleanTable(t, db, cfg.TableName)
+	gdb.Exec("DROP TABLE IF EXISTS items")
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRunMigrations_ReappliesAfterRollback(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_create_tags.up.sql":   "CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT);",
 		"000001_create_tags.down.sql": "DROP TABLE IF EXISTS tags;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
-	if err := migration.RollbackMigrations(db, cfg, 0); err != nil {
+	if err := db.RollbackMigrations(gdb, cfg, 0); err != nil {
 		t.Fatalf("rollback failed: %v", err)
 	}
-	if tableExists(db, "tags") {
+	if tableExists(gdb, "tags") {
 		t.Error("tags table should not exist after rollback")
 	}
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("re-migrate failed: %v", err)
 	}
-	if !tableExists(db, "tags") {
+	if !tableExists(gdb, "tags") {
 		t.Error("tags table should exist after re-apply")
 	}
 
-	db.Exec("DROP TABLE IF EXISTS tags")
-	cleanTable(t, db, cfg.TableName)
+	gdb.Exec("DROP TABLE IF EXISTS tags")
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRunMigrations_AutoRollbackMissingFile(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_create_alpha.up.sql":   "CREATE TABLE alpha (id INTEGER PRIMARY KEY);",
 		"000001_create_alpha.down.sql": "DROP TABLE IF EXISTS alpha;",
@@ -292,35 +292,35 @@ func TestRunMigrations_AutoRollbackMissingFile(t *testing.T) {
 		"000002_create_beta.down.sql":  "DROP TABLE IF EXISTS beta;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("initial migrate failed: %v", err)
 	}
-	if !tableExists(db, "alpha") || !tableExists(db, "beta") {
+	if !tableExists(gdb, "alpha") || !tableExists(gdb, "beta") {
 		t.Fatal("both tables should exist after initial migrate")
 	}
 
 	os.Remove(filepath.Join(dir, "000002_create_beta.up.sql"))
 	os.Remove(filepath.Join(dir, "000002_create_beta.down.sql"))
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("sync migrate failed: %v", err)
 	}
-	if tableExists(db, "beta") {
+	if tableExists(gdb, "beta") {
 		t.Error("beta table should have been auto-rolled back (file removed)")
 	}
-	if !tableExists(db, "alpha") {
+	if !tableExists(gdb, "alpha") {
 		t.Error("alpha table should still exist")
 	}
 
-	db.Exec("DROP TABLE IF EXISTS alpha")
-	db.Exec("DROP TABLE IF EXISTS beta")
-	cleanTable(t, db, cfg.TableName)
+	gdb.Exec("DROP TABLE IF EXISTS alpha")
+	gdb.Exec("DROP TABLE IF EXISTS beta")
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRunMigrations_StoresScriptsInDB(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	upSQL := "CREATE TABLE scripts_test (id INTEGER PRIMARY KEY);"
 	downSQL := "DROP TABLE IF EXISTS scripts_test;"
 	dir := createTempMigrations(t, map[string]string{
@@ -328,14 +328,14 @@ func TestRunMigrations_StoresScriptsInDB(t *testing.T) {
 		"000001_scripts_test.down.sql": downSQL,
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var record migration.MigrationRecord
-	db.Table(cfg.TableName).Where("version = ?", "000001").First(&record)
+	var record db.MigrationRecord
+	gdb.Table(cfg.TableName).Where("version = ?", "000001").First(&record)
 	if record.UpScript != upSQL {
 		t.Errorf("expected UpScript=%q, got %q", upSQL, record.UpScript)
 	}
@@ -343,61 +343,61 @@ func TestRunMigrations_StoresScriptsInDB(t *testing.T) {
 		t.Errorf("expected DownScript=%q, got %q", downSQL, record.DownScript)
 	}
 
-	db.Exec("DROP TABLE IF EXISTS scripts_test")
-	cleanTable(t, db, cfg.TableName)
+	gdb.Exec("DROP TABLE IF EXISTS scripts_test")
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRunMigrations_DefaultConfig(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_default_cfg.up.sql":   "CREATE TABLE default_cfg (id INTEGER PRIMARY KEY);",
 		"000001_default_cfg.down.sql": "DROP TABLE IF EXISTS default_cfg;",
 	})
 
-	cfg := migration.Config{MigrationPath: dir}
-	cleanTable(t, db, "schema_migrations")
+	cfg := db.Config{MigrationPath: dir}
+	cleanTable(t, gdb, "schema_migrations")
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !tableExists(db, "schema_migrations") {
+	if !tableExists(gdb, "schema_migrations") {
 		t.Error("expected default table 'schema_migrations' to exist")
 	}
 
-	db.Exec("DROP TABLE IF EXISTS default_cfg")
-	cleanTable(t, db, "schema_migrations")
+	gdb.Exec("DROP TABLE IF EXISTS default_cfg")
+	cleanTable(t, gdb, "schema_migrations")
 }
 
 func TestRunMigrations_InvalidSQL(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_bad_sql.up.sql":   "THIS IS NOT VALID SQL AT ALL;",
 		"000001_bad_sql.down.sql": "DROP TABLE IF EXISTS nonexistent;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	err := migration.RunMigrations(db, cfg)
+	err := db.RunMigrations(gdb, cfg)
 	if err == nil {
 		t.Fatal("expected error for invalid SQL, got nil")
 	}
 
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRunMigrations_EmptyDirectory(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	cfg := testConfig(t, t.TempDir())
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("expected no error for empty dir, got: %v", err)
 	}
-	if n := countRecords(t, db, cfg.TableName, migration.StatusSuccess); n != 0 {
+	if n := countRecords(t, gdb, cfg.TableName, db.StatusSuccess); n != 0 {
 		t.Errorf("expected 0 records for empty dir, got %d", n)
 	}
 
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 // ---------------------------------------------------------------------------
@@ -405,7 +405,7 @@ func TestRunMigrations_EmptyDirectory(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRollbackMigrations_RollsBackAll(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_rb_all_a.up.sql":   "CREATE TABLE rb_all_a (id INTEGER PRIMARY KEY);",
 		"000001_rb_all_a.down.sql": "DROP TABLE IF EXISTS rb_all_a;",
@@ -413,25 +413,25 @@ func TestRollbackMigrations_RollsBackAll(t *testing.T) {
 		"000002_rb_all_b.down.sql": "DROP TABLE IF EXISTS rb_all_b;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	migration.RunMigrations(db, cfg)
-	if err := migration.RollbackMigrations(db, cfg, 0); err != nil {
+	db.RunMigrations(gdb, cfg)
+	if err := db.RollbackMigrations(gdb, cfg, 0); err != nil {
 		t.Fatalf("rollback failed: %v", err)
 	}
 	for _, tbl := range []string{"rb_all_a", "rb_all_b"} {
-		if tableExists(db, tbl) {
+		if tableExists(gdb, tbl) {
 			t.Errorf("table %q should not exist after rollback all", tbl)
 		}
 	}
 
-	db.Exec("DROP TABLE IF EXISTS rb_all_a")
-	db.Exec("DROP TABLE IF EXISTS rb_all_b")
-	cleanTable(t, db, cfg.TableName)
+	gdb.Exec("DROP TABLE IF EXISTS rb_all_a")
+	gdb.Exec("DROP TABLE IF EXISTS rb_all_b")
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRollbackMigrations_RollsBackNSteps(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_rb_n_a.up.sql":   "CREATE TABLE rb_n_a (id INTEGER PRIMARY KEY);",
 		"000001_rb_n_a.down.sql": "DROP TABLE IF EXISTS rb_n_a;",
@@ -441,88 +441,88 @@ func TestRollbackMigrations_RollsBackNSteps(t *testing.T) {
 		"000003_rb_n_c.down.sql": "DROP TABLE IF EXISTS rb_n_c;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	migration.RunMigrations(db, cfg)
-	if err := migration.RollbackMigrations(db, cfg, 1); err != nil {
+	db.RunMigrations(gdb, cfg)
+	if err := db.RollbackMigrations(gdb, cfg, 1); err != nil {
 		t.Fatalf("rollback failed: %v", err)
 	}
-	if tableExists(db, "rb_n_c") {
+	if tableExists(gdb, "rb_n_c") {
 		t.Error("rb_n_c should have been rolled back")
 	}
-	if !tableExists(db, "rb_n_a") || !tableExists(db, "rb_n_b") {
+	if !tableExists(gdb, "rb_n_a") || !tableExists(gdb, "rb_n_b") {
 		t.Error("rb_n_a and rb_n_b should still exist")
 	}
 
 	for _, tbl := range []string{"rb_n_a", "rb_n_b", "rb_n_c"} {
-		db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tbl))
+		gdb.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tbl))
 	}
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRollbackMigrations_NoApplied(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	cfg := testConfig(t, t.TempDir())
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	db.Table(cfg.TableName).AutoMigrate(&migration.MigrationRecord{})
+	gdb.Table(cfg.TableName).AutoMigrate(&db.MigrationRecord{})
 
-	if err := migration.RollbackMigrations(db, cfg, 0); err != nil {
+	if err := db.RollbackMigrations(gdb, cfg, 0); err != nil {
 		t.Fatalf("expected nil error for no applied migrations, got: %v", err)
 	}
 
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRollbackMigrations_SetsStatusRollback(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_status_check.up.sql":   "CREATE TABLE status_check (id INTEGER PRIMARY KEY);",
 		"000001_status_check.down.sql": "DROP TABLE IF EXISTS status_check;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	migration.RunMigrations(db, cfg)
-	migration.RollbackMigrations(db, cfg, 0)
+	db.RunMigrations(gdb, cfg)
+	db.RollbackMigrations(gdb, cfg, 0)
 
-	var record migration.MigrationRecord
-	db.Table(cfg.TableName).Where("version = ?", "000001").Order("id desc").First(&record)
-	if record.Status != migration.StatusRollback {
-		t.Errorf("expected status %q, got %q", migration.StatusRollback, record.Status)
+	var record db.MigrationRecord
+	gdb.Table(cfg.TableName).Where("version = ?", "000001").Order("id desc").First(&record)
+	if record.Status != db.StatusRollback {
+		t.Errorf("expected status %q, got %q", db.StatusRollback, record.Status)
 	}
 	if record.Message != "Manual rollback" {
 		t.Errorf("expected message 'Manual rollback', got %q", record.Message)
 	}
 
-	db.Exec("DROP TABLE IF EXISTS status_check")
-	cleanTable(t, db, cfg.TableName)
+	gdb.Exec("DROP TABLE IF EXISTS status_check")
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRollbackMigrations_DropsTable(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_drop_verify.up.sql":   "CREATE TABLE drop_verify (id INTEGER PRIMARY KEY, data TEXT);",
 		"000001_drop_verify.down.sql": "DROP TABLE IF EXISTS drop_verify;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	migration.RunMigrations(db, cfg)
-	if !tableExists(db, "drop_verify") {
+	db.RunMigrations(gdb, cfg)
+	if !tableExists(gdb, "drop_verify") {
 		t.Fatal("drop_verify should exist before rollback")
 	}
 
-	migration.RollbackMigrations(db, cfg, 0)
-	if tableExists(db, "drop_verify") {
+	db.RollbackMigrations(gdb, cfg, 0)
+	if tableExists(gdb, "drop_verify") {
 		t.Error("drop_verify should NOT exist after rollback")
 	}
 
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 }
 
 func TestRollbackMigrations_FullCycle(t *testing.T) {
-	db := openTestDB(t)
+	gdb := openTestDB(t)
 	dir := createTempMigrations(t, map[string]string{
 		"000001_cycle_a.up.sql":   "CREATE TABLE cycle_a (id INTEGER PRIMARY KEY);",
 		"000001_cycle_a.down.sql": "DROP TABLE IF EXISTS cycle_a;",
@@ -530,47 +530,47 @@ func TestRollbackMigrations_FullCycle(t *testing.T) {
 		"000002_cycle_b.down.sql": "DROP TABLE IF EXISTS cycle_b;",
 	})
 	cfg := testConfig(t, dir)
-	cleanTable(t, db, cfg.TableName)
+	cleanTable(t, gdb, cfg.TableName)
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("step 1 migrate failed: %v", err)
 	}
-	if !tableExists(db, "cycle_a") || !tableExists(db, "cycle_b") {
+	if !tableExists(gdb, "cycle_a") || !tableExists(gdb, "cycle_b") {
 		t.Fatal("both tables should exist after step 1")
 	}
 
-	if err := migration.RollbackMigrations(db, cfg, 0); err != nil {
+	if err := db.RollbackMigrations(gdb, cfg, 0); err != nil {
 		t.Fatalf("step 2 rollback failed: %v", err)
 	}
-	if tableExists(db, "cycle_a") || tableExists(db, "cycle_b") {
+	if tableExists(gdb, "cycle_a") || tableExists(gdb, "cycle_b") {
 		t.Fatal("no tables should exist after step 2 rollback")
 	}
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("step 3 re-migrate failed: %v", err)
 	}
-	if !tableExists(db, "cycle_a") || !tableExists(db, "cycle_b") {
+	if !tableExists(gdb, "cycle_a") || !tableExists(gdb, "cycle_b") {
 		t.Fatal("both tables should exist after step 3 re-migrate")
 	}
 
-	if err := migration.RollbackMigrations(db, cfg, 1); err != nil {
+	if err := db.RollbackMigrations(gdb, cfg, 1); err != nil {
 		t.Fatalf("step 4 partial rollback failed: %v", err)
 	}
-	if !tableExists(db, "cycle_a") {
+	if !tableExists(gdb, "cycle_a") {
 		t.Error("cycle_a should still exist after partial rollback")
 	}
-	if tableExists(db, "cycle_b") {
+	if tableExists(gdb, "cycle_b") {
 		t.Error("cycle_b should be gone after partial rollback")
 	}
 
-	if err := migration.RunMigrations(db, cfg); err != nil {
+	if err := db.RunMigrations(gdb, cfg); err != nil {
 		t.Fatalf("step 5 re-migrate failed: %v", err)
 	}
-	if !tableExists(db, "cycle_a") || !tableExists(db, "cycle_b") {
+	if !tableExists(gdb, "cycle_a") || !tableExists(gdb, "cycle_b") {
 		t.Fatal("both tables should exist after step 5")
 	}
 
-	db.Exec("DROP TABLE IF EXISTS cycle_a")
-	db.Exec("DROP TABLE IF EXISTS cycle_b")
-	cleanTable(t, db, cfg.TableName)
+	gdb.Exec("DROP TABLE IF EXISTS cycle_a")
+	gdb.Exec("DROP TABLE IF EXISTS cycle_b")
+	cleanTable(t, gdb, cfg.TableName)
 }

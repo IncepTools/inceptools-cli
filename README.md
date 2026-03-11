@@ -26,38 +26,93 @@
 
 ## 🗃️ Supported Databases
 
-| Database    | Dialect Values       | Driver                     |
-|-------------|----------------------|----------------------------|
-| PostgreSQL  | `postgres`, `pg`     | `gorm.io/driver/postgres`  |
-| MySQL       | `mysql`              | `gorm.io/driver/mysql`     |
-| SQLite      | `sqlite`             | `github.com/glebarez/sqlite` |
-| SQL Server  | `sqlserver`, `mssql` | `gorm.io/driver/sqlserver` |
-| ClickHouse  | `clickhouse`         | `gorm.io/driver/clickhouse`|
+| Database   | Dialect Values       | Driver                       |
+| ---------- | -------------------- | ---------------------------- |
+| PostgreSQL | `postgres`, `pg`     | `gorm.io/driver/postgres`    |
+| MySQL      | `mysql`              | `gorm.io/driver/mysql`       |
+| SQLite     | `sqlite`             | `github.com/glebarez/sqlite` |
+| SQL Server | `sqlserver`, `mssql` | `gorm.io/driver/sqlserver`   |
+| ClickHouse | `clickhouse`         | `gorm.io/driver/clickhouse`  |
+
+## 🏗️ Project Structure
+
+The project follows a clean, modular architecture:
+
+- `main.go`: Lightweight entry point and CLI dispatcher.
+- `src/cmd/`: Individual command handlers (init, create, migrate, etc.).
+- `src/db/`: Core database migration engine and dialect support.
+- `src/config/`: Configuration management (`icpt.json`).
+- `test/`: Comprehensive test suite for database and CLI logic.
 
 ## 📦 Installation
 
-### Download a Pre-Built Binary
+### Homebrew (Recommended for macOS/Linux)
+
+```bash
+brew install inceptools/tap/inceptools
+```
+
+### APT (Ubuntu/Debian)
+
+Download the `.deb` package from the [**Releases**](https://github.com/IncepTools/inceptools-cli/releases/latest) page and install:
+
+```bash
+sudo dpkg -i inceptools_*.deb
+```
+
+### Pre-built Binaries
 
 Grab the latest release for your platform from the [**Releases**](https://github.com/IncepTools/inceptools-cli/releases/latest) page.
 
 ```bash
-# Example: Linux amd64
-curl -Lo inceptools https://github.com/IncepTools/inceptools-cli/releases/latest/download/inceptools-linux-amd64
-chmod +x inceptools
-sudo mv inceptools /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/IncepTools/inceptools-cli/main/install.sh
 ```
 
-### Build From Source
+## 🛠️ Usage
+
+### 1. Initialize
 
 ```bash
-git clone https://github.com/IncepTools/inceptools-cli.git
-cd inceptools-cli
-go build -o inceptools .
+inceptools init
 ```
 
-## 🚀 Quick Start
+Creates a `migrations/` directory and `icpt.json` config.
 
-### 1. Initialize Configuration
+### 2. Create Migration
+
+```bash
+inceptools create
+```
+
+Interactively prompts for a topic and generates `.up.sql` and `.down.sql` files.
+
+### 3. Run Migrations
+
+```bash
+inceptools migrate [database_url]
+```
+
+If `database_url` is omitted, it uses the environment variable defined in `icpt.json`.
+
+### 4. Rollback
+
+```bash
+inceptools down [database_url] --steps 1
+```
+
+### 5. Update CLI
+
+```bash
+inceptools update
+```
+
+# 000001_create_users_table.up.sql
+
+# 000001_create_users_table.down.sql
+
+````
+
+Follow the prompt to enter a topic for your migration.
 
 Create an `icpt.json` in your project root:
 
@@ -67,13 +122,13 @@ Create an `icpt.json` in your project root:
   "migration_path": "./migrations",
   "dialect": "postgres"
 }
-```
+````
 
-| Key              | Default          | Description                                       |
-|------------------|------------------|---------------------------------------------------|
-| `env_variable`   | `DATABASE_URL`   | Environment variable holding the database DSN     |
-| `migration_path` | `./migrations`   | Directory where migration SQL files are stored    |
-| `dialect`        | `postgres`       | Database dialect (see table above)                |
+| Key              | Default        | Description                                    |
+| ---------------- | -------------- | ---------------------------------------------- |
+| `env_variable`   | `DATABASE_URL` | Environment variable holding the database DSN  |
+| `migration_path` | `./migrations` | Directory where migration SQL files are stored |
+| `dialect`        | `postgres`     | Database dialect (see table above)             |
 
 ### 2. Create a Migration
 
@@ -89,6 +144,7 @@ inceptools create
 Edit the generated files in `./migrations/`:
 
 **`000001_create_users_table.up.sql`**
+
 ```sql
 CREATE TABLE users (
     id    SERIAL PRIMARY KEY,
@@ -98,6 +154,7 @@ CREATE TABLE users (
 ```
 
 **`000001_create_users_table.down.sql`**
+
 ```sql
 DROP TABLE IF EXISTS users;
 ```

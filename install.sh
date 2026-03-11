@@ -119,14 +119,14 @@ do_install() {
     if [ -z "$VERSIONS" ]; then
         warn "Could not list versions from GitHub (you might be rate-limited)."
         echo -ne "Please enter the version tag manually (e.g., v1.0.0): "
-        read -r VERSION
+        read -r VERSION < /dev/tty
         if [ -z "$VERSION" ]; then error "Version is required."; fi
     else
         echo -e "\nAvailable versions:"
         echo "$VERSIONS" | nl -w 2 -s '. '
         LATEST_VERSION=$(echo "$VERSIONS" | head -n 1)
         echo -ne "Enter version number or tag [Default: $LATEST_VERSION]: "
-        read -r SELECTION
+        read -r SELECTION < /dev/tty
 
         if [ -z "$SELECTION" ]; then
             VERSION="$LATEST_VERSION"
@@ -194,6 +194,15 @@ do_install() {
 preflight
 header
 
+# Package Manager Suggestions
+if [[ "$OS" == "darwin" ]] && command -v brew >/dev/null 2>&1; then
+    info "Suggestion: You have Homebrew installed. You can also install via:"
+    echo -e "  ${BOLD}brew tap IncepTools/inceptools${NC}"
+    echo -e "  ${BOLD}brew install inceptools${NC}\n"
+elif [[ "$OS" == "linux" ]] && command -v apt >/dev/null 2>&1; then
+    info "Suggestion: You are on a Debian-based system. Check our releases for .deb packages."
+fi
+
 if check_existing; then
     echo -e "Existing installation found:"
     echo -e "  - Path:    $EXISTING_PATH"
@@ -203,7 +212,7 @@ if check_existing; then
     echo "  2. Uninstall $BINARY_NAME"
     echo "  3. Exit"
     echo -ne "\nOption [1-3]: "
-    read -r CHOICE
+    read -r CHOICE < /dev/tty
 
     case $CHOICE in
         1) do_install ;;
