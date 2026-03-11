@@ -150,7 +150,10 @@ do_install() {
     info "Downloading ${ASSET_NAME} from ${VERSION}..."
     CURL_STATUS=$(curl -sL -w "%{http_code}" "$DOWNLOAD_URL" -o "${TMP_DIR}/${ASSET_NAME}")
     if [ "$CURL_STATUS" -ne 200 ]; then
-        error "Download failed (HTTP $CURL_STATUS). Asset for $VERSION on $OS/$ARCH may not exist."
+        echo -e "\n${RED}error:${NC} Download failed (HTTP $CURL_STATUS)."
+        echo "The asset '${ASSET_NAME}' for version ${VERSION} may still be building or is not available for ${OS}/${ARCH}."
+        echo "Check progress at: ${GITHUB_URL}/actions"
+        exit 1
     fi
 
     info "Checking for checksums..."
