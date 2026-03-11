@@ -54,7 +54,7 @@ jobs:
           CGO_ENABLED=0 go build \
             -ldflags="-s -w -X main.Version=${{ github.ref_name }}" \
             -trimpath \
-            -o "dist/$BINARY" .
+            -o "dist/$BINARY_NAME" .
 
       - name: Package Archive
         run: |
@@ -85,7 +85,6 @@ jobs:
           name: build-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/*
           retention-days: 1
-
 
   release:
     name: Create Release
@@ -145,3 +144,5 @@ jobs:
           git add Formula/inceptools.rb
           git commit -m "chore: update homebrew formula to ${VERSION}" || echo "No changes"
           git push origin main || echo "Push skipped"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
