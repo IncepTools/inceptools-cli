@@ -103,11 +103,13 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            dist/inceptools-*
             dist/*.deb
             dist/*.tar.gz
             dist/*.zip
             dist/checksums.txt
+            dist/inceptools-linux-*
+            dist/inceptools-darwin-*
+            dist/inceptools-windows-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
