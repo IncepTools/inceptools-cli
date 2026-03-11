@@ -30,10 +30,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -70,7 +70,7 @@ jobs:
           sha256sum * > checksums-${{ matrix.os }}-${{ matrix.arch }}.txt
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binaries-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/
@@ -82,12 +82,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist/
           merge-multiple: true
@@ -108,5 +108,36 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Update Homebrew Formula
+        run: |
+          VERSION=${{ github.ref_name }}
+          V_STR=${VERSION#v}
+
+          # Calculate SHA256 for all platforms
+          SHA_DARWIN_AMD64=$(sha256sum dist/inceptools-darwin-amd64.tar.gz | cut -d ' ' -f 1)
+          SHA_DARWIN_ARM64=$(sha256sum dist/inceptools-darwin-arm64.tar.gz | cut -d ' ' -f 1)
+          SHA_LINUX_AMD64=$(sha256sum dist/inceptools-linux-amd64.tar.gz | cut -d ' ' -f 1)
+          SHA_LINUX_ARM64=$(sha256sum dist/inceptools-linux-arm64.tar.gz | cut -d ' ' -f 1)
+
+          # Update the formula
+          sed -i "s/{{VERSION}}/${V_STR}/g" Formula/inceptools.rb
+          sed -i "s/{{SHA256_DARWIN_AMD64}}/${SHA_DARWIN_AMD64}/g" Formula/inceptools.rb
+          sed -i "s/{{SHA256_DARWIN_ARM64}}/${SHA_DARWIN_ARM64}/g" Formula/inceptools.rb
+          sed -i "s/{{SHA256_LINUX_AMD64}}/${SHA_LINUX_AMD64}/g" Formula/inceptools.rb
+          sed -i "s/{{SHA256_LINUX_ARM64}}/${SHA_LINUX_ARM64}/g" Formula/inceptools.rb
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Ensure we are on main branch for the commit
+          git fetch origin main
+          git checkout main
+
+          git add Formula/inceptools.rb
+          git commit -m "chore: update homebrew formula to ${VERSION}" || echo "No changes to commit"
+          git push origin main || echo "Push failed"
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
