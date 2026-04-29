@@ -1,7 +1,7 @@
 package db_test
 
 import (
-	"incepttools/src/db"
+	"github.com/IncepTools/inceptools-cli/src/db"
 	"testing"
 )
 

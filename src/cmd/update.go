@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"incepttools/src/ui"
+	"github.com/IncepTools/inceptools-cli/src/ui"
 	"io"
 	"net/http"
 	"os"

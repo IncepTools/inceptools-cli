@@ -46,6 +46,12 @@ The project follows a clean, modular architecture:
 
 ## 📦 Installation
 
+### Go Install
+
+```bash
+go install github.com/IncepTools/inceptools-cli@latest
+```
+
 ### Homebrew (Recommended for macOS/Linux)
 
 ```bash

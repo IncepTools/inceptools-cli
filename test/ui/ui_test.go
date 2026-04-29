@@ -1,7 +1,7 @@
 package ui_test
 
 import (
-	"incepttools/src/ui"
+	"github.com/IncepTools/inceptools-cli/src/ui"
 	"testing"
 )
 

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"incepttools/src/db" // Import the package under test
+	"github.com/IncepTools/inceptools-cli/src/db" // Import the package under test
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"

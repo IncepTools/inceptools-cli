@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"incepttools/src/cmd"
-	"incepttools/src/ui"
+	"github.com/IncepTools/inceptools-cli/src/cmd"
+	"github.com/IncepTools/inceptools-cli/src/ui"
 	"os"
 )
 

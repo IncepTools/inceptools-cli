@@ -3,7 +3,7 @@ package cmd_test
 import (
 	"bytes"
 	"fmt"
-	"incepttools/src/cmd"
+	"github.com/IncepTools/inceptools-cli/src/cmd"
 	"io"
 	"os"
 	"path/filepath"

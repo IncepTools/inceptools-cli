@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"incepttools/src/core"
-	"incepttools/src/db"
-	"incepttools/src/ui"
+	"github.com/IncepTools/inceptools-cli/src/core"
+	"github.com/IncepTools/inceptools-cli/src/db"
+	"github.com/IncepTools/inceptools-cli/src/ui"
 	"os"
 
 	"gorm.io/gorm"

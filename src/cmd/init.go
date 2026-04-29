@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"encoding/json"
-	"incepttools/src/core"
-	"incepttools/src/ui"
+	"github.com/IncepTools/inceptools-cli/src/core"
+	"github.com/IncepTools/inceptools-cli/src/ui"
 	"os"
 )
 

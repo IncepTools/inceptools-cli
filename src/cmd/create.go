@@ -3,7 +3,7 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"incepttools/src/ui"
+	"github.com/IncepTools/inceptools-cli/src/ui"
 	"os"
 	"path/filepath"
 	"strconv"

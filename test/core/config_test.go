@@ -1,7 +1,7 @@
 package core_test
 
 import (
-	"incepttools/src/core"
+	"github.com/IncepTools/inceptools-cli/src/core"
 	"os"
 	"testing"
 )
