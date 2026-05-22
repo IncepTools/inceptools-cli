@@ -28,6 +28,14 @@ func RunMigrations(db *gorm.DB, cfg Config) error {
 		return fmt.Errorf("failed to init migration table: %v", err)
 	}
 
+	// 2b. Sync the bookkeeping table's id sequence with MAX(id).
+	// After a pg_dump custom-format restore (or a partial/aborted run), the
+	// sequence can fall behind the existing rows, so the next DEFAULT-id
+	// INSERT collides on the primary key. Idempotent and cheap.
+	if err := syncMigrationIDSequence(db, cfg.TableName); err != nil {
+		log.Printf("warning: could not sync %s id sequence: %v", cfg.TableName, err)
+	}
+
 	// 3. Load Local Files
 	localFiles, err := LoadLocalMigrations(cfg.MigrationPath)
 	if err != nil {
@@ -94,23 +102,37 @@ func RunMigrations(db *gorm.DB, cfg Config) error {
 		if shouldRun {
 			log.Printf("Applying Migration: %s - %s", mig.Version, mig.Name)
 
-			// Execute UP
-			if err := db.Exec(mig.UpScript).Error; err != nil {
-				return fmt.Errorf("failed to apply %s: %v", mig.Version, err)
-			}
+			// Run DDL and bookkeeping inside one transaction so a failure on
+			// either side cannot leave the schema half-migrated. (Note: DDL in
+			// Postgres is transactional, so this rolls back ALTER/CREATE/DROP
+			// alongside the bookkeeping row if anything fails.)
+			if err := db.Transaction(func(tx *gorm.DB) error {
+				if err := tx.Exec(mig.UpScript).Error; err != nil {
+					return fmt.Errorf("failed to apply %s: %v", mig.Version, err)
+				}
 
-			// Create NEW Record (History)
-			newRecord := MigrationRecord{
-				Version:     mig.Version,
-				Name:        mig.Name,
-				UpScript:    mig.UpScript,
-				DownScript:  mig.DownScript,
-				Status:      StatusSuccess,
-				AppliedAt:   time.Now(),
-				Message:     "Applied successfully",
-			}
-			if err := db.Table(cfg.TableName).Create(&newRecord).Error; err != nil {
-				return fmt.Errorf("failed to save migration log for %s: %v", mig.Version, err)
+				// Clear any prior bookkeeping row for this version (e.g. a
+				// stale 'rollback' record) so the new success row inserts
+				// cleanly regardless of the table's PK shape.
+				if err := tx.Table(cfg.TableName).Where("version = ?", mig.Version).Delete(&MigrationRecord{}).Error; err != nil {
+					return fmt.Errorf("failed to clear prior log for %s: %v", mig.Version, err)
+				}
+
+				newRecord := MigrationRecord{
+					Version:    mig.Version,
+					Name:       mig.Name,
+					UpScript:   mig.UpScript,
+					DownScript: mig.DownScript,
+					Status:     StatusSuccess,
+					AppliedAt:  time.Now(),
+					Message:    "Applied successfully",
+				}
+				if err := tx.Table(cfg.TableName).Create(&newRecord).Error; err != nil {
+					return fmt.Errorf("failed to save migration log for %s: %v", mig.Version, err)
+				}
+				return nil
+			}); err != nil {
+				return err
 			}
 		} else {
 			// Already applied
@@ -243,3 +265,34 @@ func LoadLocalMigrations(path string) (map[string]LocalMigration, error) {
 
 	return result, nil
 }
+
+// syncMigrationIDSequence resets the bookkeeping table's id sequence to
+// MAX(id) so the next DEFAULT-id INSERT doesn't collide with rows that
+// were restored from a pg_dump. No-ops on non-Postgres dialects or when
+// the table has no id sequence.
+func syncMigrationIDSequence(db *gorm.DB, tableName string) error {
+	if db.Dialector == nil || db.Dialector.Name() != "postgres" {
+		return nil
+	}
+	// pg_get_serial_sequence returns NULL when the column has no owned
+	// sequence (e.g. id is plain UUID or text). setval is a no-op then.
+	return db.Exec(`
+		SELECT setval(
+		    pg_get_serial_sequence(?, 'id'),
+		    GREATEST(COALESCE((SELECT MAX(id) FROM `+quoteIdent(tableName)+`), 0), 1),
+		    (SELECT COUNT(*) > 0 FROM `+quoteIdent(tableName)+`)
+		)
+		WHERE pg_get_serial_sequence(?, 'id') IS NOT NULL
+	`, tableName, tableName).Error
+}
+
+// quoteIdent double-quotes a SQL identifier safely. The table name comes
+// from config (not user input at runtime), but we still defend against
+// injection by rejecting double-quotes inside it.
+func quoteIdent(name string) string {
+	if strings.ContainsAny(name, `"`+"\x00") {
+		return `"schema_migrations"` // refuse to interpolate; fall back to default
+	}
+	return `"` + name + `"`
+}
+
