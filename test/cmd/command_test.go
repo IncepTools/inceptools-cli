@@ -74,7 +74,7 @@ func TestHandleCreate(t *testing.T) {
 	}()
 
 	// Run HandleCreate
-	cmd.HandleCreate()
+	cmd.HandleCreate("")
 
 	// Verify files created
 	files, _ := os.ReadDir("./migrations")
@@ -110,7 +110,7 @@ func TestHandleMigrate(t *testing.T) {
 
 	// 2. Run migrate with a temp db
 	dbPath := filepath.Join(tmpDir, "test.db")
-	cmd.HandleMigrate(dbPath)
+	cmd.HandleMigrate(dbPath, "")
 
 	// 3. Verify
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
@@ -135,8 +135,53 @@ func TestHandleDown(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	// 2. Migrate first
-	cmd.HandleMigrate(dbPath)
+	cmd.HandleMigrate(dbPath, "")
 
 	// 3. Run down
-	cmd.HandleDown(dbPath, 1)
+	cmd.HandleDown(dbPath, "", 1)
+}
+
+func TestHandleMigrate_MultiDB(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	// 1. Setup per-database migration dirs
+	os.MkdirAll("migrations/global", 0755)
+	os.MkdirAll("migrations/noida", 0755)
+	os.WriteFile("migrations/global/000001_init.up.sql", []byte("CREATE TABLE orgs (id INTEGER PRIMARY KEY);"), 0644)
+	os.WriteFile("migrations/global/000001_init.down.sql", []byte("DROP TABLE orgs;"), 0644)
+	os.WriteFile("migrations/noida/000001_init.up.sql", []byte("CREATE TABLE vms (id INTEGER PRIMARY KEY);"), 0644)
+	os.WriteFile("migrations/noida/000001_init.down.sql", []byte("DROP TABLE vms;"), 0644)
+
+	cfg := `{
+		"dialect": "sqlite",
+		"databases": {
+			"global": {"env_variable": "TEST_GLOBAL_DB_URL", "migration_path": "./migrations/global"},
+			"noida":  {"env_variable": "TEST_NOIDA_DB_URL", "migration_path": "./migrations/noida"}
+		}
+	}`
+	os.WriteFile("icpt.json", []byte(cfg), 0644)
+
+	globalPath := filepath.Join(tmpDir, "global.db")
+	noidaPath := filepath.Join(tmpDir, "noida.db")
+	t.Setenv("TEST_GLOBAL_DB_URL", globalPath)
+	t.Setenv("TEST_NOIDA_DB_URL", noidaPath)
+
+	// 2. Migrate all configured databases in one run
+	cmd.HandleMigrate("", "")
+
+	if _, err := os.Stat(globalPath); os.IsNotExist(err) {
+		t.Fatal("global database file was not created")
+	}
+	if _, err := os.Stat(noidaPath); os.IsNotExist(err) {
+		t.Fatal("noida database file was not created")
+	}
+
+	// 3. Rollback must target a single named database
+	cmd.HandleDown("", "noida", 1)
+
+	// 4. Targeted migrate of just one database
+	cmd.HandleMigrate("", "noida")
 }

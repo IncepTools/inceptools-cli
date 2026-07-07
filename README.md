@@ -136,6 +136,39 @@ Create an `icpt.json` in your project root:
 | `migration_path` | `./migrations` | Directory where migration SQL files are stored |
 | `dialect`        | `postgres`     | Database dialect (see table above)             |
 
+#### Multiple Databases
+
+Projects with more than one database can declare a `databases` map instead of
+the flat single-database keys. Each entry has its own env variable and
+migration directory; a per-database `dialect` overrides the top-level one.
+
+```json
+{
+  "dialect": "postgres",
+  "databases": {
+    "global": {
+      "env_variable": "DATABASE_URL",
+      "migration_path": "./migrations/global"
+    },
+    "regional": {
+      "env_variable": "REGIONAL_DATABASE_URL",
+      "migration_path": "./migrations/regional"
+    }
+  }
+}
+```
+
+- `migration_path` defaults to `./migrations/<name>` when omitted.
+- Each database keeps its own `schema_migrations` history table.
+
+```bash
+inceptools migrate                # migrate ALL configured databases
+inceptools migrate -db regional   # migrate a single database
+inceptools create -db regional    # create a migration for one database
+inceptools create                 # prompts you to pick the database
+inceptools down -db regional -steps 1   # rollback requires an explicit -db
+```
+
 ### 2. Create a Migration
 
 ```bash

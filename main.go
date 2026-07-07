@@ -47,22 +47,29 @@ func main() {
 	case "version":
 		fmt.Printf("inceptools version %s\n", Version)
 	case "create":
-		cmd.HandleCreate()
+		createCmd := flag.NewFlagSet("create", flag.ExitOnError)
+		dbName := createCmd.String("db", "", "Named database from icpt.json (when multiple are configured)")
+		createCmd.Parse(flag.Args()[1:])
+		cmd.HandleCreate(*dbName)
 	case "migrate":
+		migrateCmd := flag.NewFlagSet("migrate", flag.ExitOnError)
+		dbName := migrateCmd.String("db", "", "Named database from icpt.json (default: all configured databases)")
+		migrateCmd.Parse(flag.Args()[1:])
 		dbURL := ""
-		if flag.NArg() >= 2 {
-			dbURL = flag.Arg(1)
+		if migrateCmd.NArg() >= 1 {
+			dbURL = migrateCmd.Arg(0)
 		}
-		cmd.HandleMigrate(dbURL)
+		cmd.HandleMigrate(dbURL, *dbName)
 	case "down":
 		downCmd := flag.NewFlagSet("down", flag.ExitOnError)
 		steps := downCmd.Int("steps", 0, "Number of migrations to roll back (0 = all)")
+		dbName := downCmd.String("db", "", "Named database from icpt.json (required when multiple are configured)")
 		downCmd.Parse(flag.Args()[1:])
 		dbURL := ""
 		if downCmd.NArg() >= 1 {
 			dbURL = downCmd.Arg(0)
 		}
-		cmd.HandleDown(dbURL, *steps)
+		cmd.HandleDown(dbURL, *dbName, *steps)
 	default:
 		ui.Error("Unknown command: %s", command)
 		flag.Usage()

@@ -75,6 +75,69 @@ func TestLoadConfig_FillsPartialDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_MultiDatabase(t *testing.T) {
+	content := `{
+		"dialect": "postgres",
+		"databases": {
+			"global": {"env_variable": "DATABASE_URL", "migration_path": "./migrations/global"},
+			"noida":  {"env_variable": "NOIDA_DATABASE_URL", "dialect": "mysql"}
+		}
+	}`
+	if err := os.WriteFile("icpt.json", []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("icpt.json")
+
+	cfg, err := core.LoadConfig()
+	if err != nil {
+		t.Fatalf("Unexpected error loading config: %v", err)
+	}
+
+	targets := cfg.Targets()
+	if len(targets) != 2 {
+		t.Fatalf("Expected 2 targets, got %d", len(targets))
+	}
+
+	// Targets are sorted by name: global, noida
+	if targets[0].Name != "global" || targets[0].EnvVariable != "DATABASE_URL" {
+		t.Errorf("Unexpected first target: %+v", targets[0])
+	}
+	if targets[0].Dialect != "postgres" {
+		t.Errorf("Expected global to inherit top-level dialect, got '%s'", targets[0].Dialect)
+	}
+	if targets[1].Name != "noida" || targets[1].Dialect != "mysql" {
+		t.Errorf("Expected noida to override dialect with mysql, got '%s'", targets[1].Dialect)
+	}
+	// Missing migration_path defaults to ./migrations/<name>
+	if targets[1].MigrationPath != "./migrations/noida" {
+		t.Errorf("Expected default MigrationPath './migrations/noida', got '%s'", targets[1].MigrationPath)
+	}
+
+	// Selection by name
+	selected, err := cfg.SelectTargets("noida")
+	if err != nil || len(selected) != 1 || selected[0].Name != "noida" {
+		t.Errorf("SelectTargets('noida') failed: %v, %+v", err, selected)
+	}
+	if _, err := cfg.SelectTargets("mumbai"); err == nil {
+		t.Error("Expected error selecting unknown database, got nil")
+	}
+}
+
+func TestTargets_LegacySingleConfig(t *testing.T) {
+	cfg := core.ICPTConfig{
+		EnvVariable:   "MY_DB_URL",
+		MigrationPath: "./migrations",
+		Dialect:       "postgres",
+	}
+	targets := cfg.Targets()
+	if len(targets) != 1 {
+		t.Fatalf("Expected 1 target, got %d", len(targets))
+	}
+	if targets[0].Name != "default" || targets[0].EnvVariable != "MY_DB_URL" {
+		t.Errorf("Unexpected legacy target: %+v", targets[0])
+	}
+}
+
 func TestLoadConfig_InvalidJSON(t *testing.T) {
 	err := os.WriteFile("icpt.json", []byte("{invalid json"), 0644)
 	if err != nil {
